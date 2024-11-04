@@ -17,7 +17,7 @@ from utils.utils import get_util_functions_self_cluster
     
 args = parse_args()
 argsdict = vars(args)
-print(pprint.pformat(argsdict))
+# print(pprint.pformat(argsdict))
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -42,8 +42,10 @@ if args.split is not None and args.split == 'mini_val':
 else:
     apps = load_dataset("codeparrot/apps")[args.split]
 
-with open(args.prompt_file, 'r', encoding='utf-8') as infile:
-    prompt = infile.read()
+prelim_prompts = []
+for prompt_i in range(len(args.prompt_file)):
+    with open(args.prompt_file[prompt_i], 'r', encoding='utf-8') as infile:
+        prelim_prompts.append(infile.read())
 
 if not os.path.exists(args.output_path):
     os.makedirs(args.output_path, exist_ok=True)
@@ -69,35 +71,11 @@ for idx in tqdm(range(args.start, args.end), total=args.end-args.start):
         continue 
             
     question = problem['question']
-    curr_prompt = prompt.replace("<<problem>>", question)    
-        
-    if '<<starter_code>>' in prompt:
-        starter_code = problem['starter_code'] 
-        curr_prompt = curr_prompt.replace("<<starter_code>>", starter_code)
-        
-    if '<<starter_code_task>>' in prompt:
-        starter_code = problem['starter_code'] 
-        if len(starter_code)>0:
-            starter_code_prompt = f"Notes:\nThe final python function should begin with: \n```python\n{starter_code}\n```"
-        else:
-            starter_code_prompt = ''
-        curr_prompt = curr_prompt.replace("<<starter_code_task>>", starter_code_prompt)
-    
-    if '<<question_guide>>' in prompt:
-        starter_code = problem['starter_code'] 
-        if len(starter_code)>0:
-            question_guide = 'use the provided function signature'
-        else:
-            question_guide = 'read from and write to standard IO'
-        curr_prompt = curr_prompt.replace("<<question_guide>>", question_guide)    
-    
-    if '<<modules>>' in curr_prompt: 
-        if problem_id not in modules: continue 
-        curr_modules = list(modules[problem_id])
-        module_seq = ''
-        for module in curr_modules: 
-            module_seq += "\n```module\n" + module.strip() + "\n```\n"
-        curr_prompt = curr_prompt.replace('<<modules>>', module_seq)
+    if len(prelim_prompts) == 0:
+        curr_prompt = prompt.replace("<<problem>>", question)
+    else:
+        prelim_prompts[1] = prelim_prompts[1].replace("<<problem>>", question)
+        curr_prompt = prelim_prompts[-1]
     
     success = False 
     start = time.time()
@@ -108,17 +86,30 @@ for idx in tqdm(range(args.start, args.end), total=args.end-args.start):
         num_loops = int(args.num_gen_samples/5)
     
     for i in tqdm(range(num_loops), leave=False):
-        while time.time() - start < 80:     
+        conversation = [{"role": "system", 
+                        "content": "You are a helpful AI assistant to help developers to solve challenging coding problems."}]
+        while time.time() - start < 80:   
+            # preliminary question asking  
+            for prelim_prompt in prelim_prompts[:-1]:
+                prompt = {"role": "user", "content": prelim_prompt}
+                conversation.append(prompt)
+                response = openai.ChatCompletion.create(
+                    model=model_mapping[args.model], 
+                    messages=conversation,
+                    n=1,
+                )
+                response = response.choices[0].message['content']
+                response = {"role": "system", "content": response}
+                conversation.append(response)
+                    
+            prompt = {"role": "user", 
+                    "content": curr_prompt}   
+            conversation.append(prompt)
             try: 
                 response = openai.ChatCompletion.create(
                   model=model_mapping[args.model], 
-                  messages=[
-                        {"role": "system", 
-                         "content": "You are a helpful AI assistant to help developers to solve challenging coding problems."},
-                        {"role": "user", 
-                         "content": curr_prompt}
-                    ],
-                  n=5 if args.num_gen_samples > 1 else 1,
+                  messages=conversation,
+                  n=1,
                 )
                 success = True 
                 responses.append(response)
@@ -127,21 +118,21 @@ for idx in tqdm(range(args.start, args.end), total=args.end-args.start):
                 print(
                     f"Invalid request error: {e}"
                 )
-                time.sleep(10)
+                time.sleep(60)
                 continue 
 
             except openai.error.RateLimitError as e:
                 print(
                     f"Rate limit error: {e}"
                 )
-                time.sleep(10)
+                time.sleep(60)
                 continue 
 
             except openai.error.APIError as e: 
                 print(
                     f"HTTP code 502 API error: {e}"
                 )
-                time.sleep(10)
+                time.sleep(60)
                 continue 
         
     if not success: 

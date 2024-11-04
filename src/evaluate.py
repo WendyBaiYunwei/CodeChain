@@ -49,9 +49,10 @@ for level, subset_data in val_dataset.items():
         if os.path.exists(gen_file):
             data = json.load(open(gen_file, 'r'))
             output = data['output']
+            if not isinstance(output, list):
+                output = [output]
             prompt = data['prompt']
             final_code = [extract_code(c) for c in output]
-           
         else:
             continue 
             

@@ -14,6 +14,7 @@ def parse_args():
         help="Output path to save generated code")
     parser.add_argument(
         '--prompt_file',
+        nargs='+',
         type=str,
         help="Path to instruction prompt")
     parser.add_argument(
