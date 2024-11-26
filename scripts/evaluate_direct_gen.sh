@@ -1,8 +1,8 @@
-split=test # test OR mini_val
-model=gpt3.5 # gpt3.5 or gpt4 
+split=mini_val # test OR mini_val
+model=gpt4 # gpt3.5 or gpt4 
 start=0
 end=10
-num_gen_samples=20
+num_gen_samples=1
 
 prompt=prompts/direct_gen.txt 
 exp_name=${model}_${split}

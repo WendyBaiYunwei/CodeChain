@@ -49,6 +49,7 @@ for level, subset_data in val_dataset.items():
         if os.path.exists(gen_file):
             data = json.load(open(gen_file, 'r'))
             output = data['output']
+            print(output)
             if not isinstance(output, list):
                 output = [output]
             prompt = data['prompt']

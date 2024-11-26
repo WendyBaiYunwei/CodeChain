@@ -1,4 +1,4 @@
-Below is a competitive programming question. Read the question carefully.
+Below is a competitive programming question. Read the question carefully without rushing.
 
 *Instruction*
 Develop a well-structured Python solution for the provided problem that obeys the constraints and passes the example test cases. 
@@ -125,7 +125,7 @@ for _ in range(int(input())):
 
 -----------------
 
-### Example 2
+### Problem
 
 <<problem>>
 

@@ -1,0 +1,5 @@
+src/configs/__pycache__/*
+src/utils/__pycache__/*
+outputs/*
+data/*
+*.txt

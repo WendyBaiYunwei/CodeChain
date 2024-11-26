@@ -13,6 +13,7 @@ import torch
 
 from configs.config_generate import parse_args
 from utils.utils import get_util_functions_self_cluster
+from utils.trr_functions import get_pseudocode1, get_pseudocode2, get_trr, get_problem
   
     
 args = parse_args()
@@ -59,6 +60,33 @@ if args.modules_file is not None:
     modules = get_util_functions_self_cluster(modules, num_clusters=args.num_clusters)
     print("Util functions for {} problems".format(len(modules)))
 
+get_problem = {
+    "name": "get_problem",
+    "description": "Get coding problem",
+    "parameters": {
+    },
+}
+
+get_trr = {
+    "name": "get_trr",
+    "description": "Get trr solving framework",
+    "parameters": {
+    },
+}
+
+get_pseudocode1 = {
+    "name": "get_pseudocode1",
+    "description": "Get Pseudocode",
+    "parameters": {},
+}
+
+get_pseudocode2 = {
+    "name": "get_pseudocode2",
+    "description": "Get Pseudocode",
+    "parameters": {
+    },
+}
+
 lens = [] 
 for idx in tqdm(range(args.start, args.end), total=args.end-args.start): 
     if args.split is not None and args.split == 'mini_val':
@@ -67,14 +95,18 @@ for idx in tqdm(range(args.start, args.end), total=args.end-args.start):
         problem = apps[idx]
     problem_id = problem['problem_id']
     
-    if os.path.exists(args.output_path + '/{}.json'.format(problem_id)):
-        continue 
+    # if os.path.exists(args.output_path + '/{}.json'.format(problem_id)):
+    #     continue 
             
     question = problem['question']
     if len(prelim_prompts) == 0:
         curr_prompt = prompt.replace("<<problem>>", question)
     else:
-        prelim_prompts[1] = prelim_prompts[1].replace("<<problem>>", question)
+        # prelim_prompts[0] = prelim_prompts[0].replace("<<problem>>", question)
+        # prelim_prompts[1] = prelim_prompts[1].replace("<<problem>>", question)
+        # prelim_prompts[2] = prelim_prompts[2].replace("<<problem>>", question)
+        with open('coding_problem.txt', 'w') as f:
+            f.write(question)
         curr_prompt = prelim_prompts[-1]
     
     success = False 
@@ -86,56 +118,41 @@ for idx in tqdm(range(args.start, args.end), total=args.end-args.start):
         num_loops = int(args.num_gen_samples/5)
     
     for i in tqdm(range(num_loops), leave=False):
-        conversation = [{"role": "system", 
-                        "content": "You are a helpful AI assistant to help developers to solve challenging coding problems."}]
-        while time.time() - start < 80:   
-            # preliminary question asking  
-            for prelim_prompt in prelim_prompts[:-1]:
-                prompt = {"role": "user", "content": prelim_prompt}
-                conversation.append(prompt)
+        for stage in range(len(prelim_prompts)):
+            prompt = prelim_prompts[stage]
+            prompt = [{"role": "user", "content": prompt}]
+            if stage == 0:
                 response = openai.ChatCompletion.create(
                     model=model_mapping[args.model], 
-                    messages=conversation,
+                    messages=prompt,
                     n=1,
+                    functions=[get_problem, get_trr],
+                    function_call="auto"
                 )
-                response = response.choices[0].message['content']
-                response = {"role": "system", "content": response}
-                conversation.append(response)
-                    
-            prompt = {"role": "user", 
-                    "content": curr_prompt}   
-            conversation.append(prompt)
-            try: 
+            elif stage == 1:
                 response = openai.ChatCompletion.create(
-                  model=model_mapping[args.model], 
-                  messages=conversation,
-                  n=1,
+                    model=model_mapping[args.model], 
+                    messages=prompt,
+                    n=1,
+                    functions=[get_problem, get_pseudocode1],
+                    function_call="auto"
                 )
-                success = True 
-                responses.append(response)
-                break 
-            except openai.error.InvalidRequestError as e:
-                print(
-                    f"Invalid request error: {e}"
+            elif stage == 2:
+                response = openai.ChatCompletion.create(
+                    model=model_mapping[args.model], 
+                    messages=prompt,
+                    n=1,
+                    functions=[get_problem, get_pseudocode2],
+                    function_call="auto"
                 )
-                time.sleep(60)
-                continue 
 
-            except openai.error.RateLimitError as e:
-                print(
-                    f"Rate limit error: {e}"
-                )
-                time.sleep(60)
-                continue 
-
-            except openai.error.APIError as e: 
-                print(
-                    f"HTTP code 502 API error: {e}"
-                )
-                time.sleep(60)
-                continue 
-        
-    if not success: 
+            if stage > 0:
+                with open(f'pseudocode{stage}.txt', 'w') as f:
+                    f.write(response.choices[0].message['content'])
+            print(prompt, '\n\n\n\n', response)
+            print('\n\n\n\n')
+            
+    if not response: 
         print("Failure to generate! skipp this sample problem id {}".format(problem_id))
         continue 
         
@@ -149,4 +166,4 @@ for idx in tqdm(range(args.start, args.end), total=args.end-args.start):
     curr_output = {} 
     curr_output['prompt'] = curr_prompt 
     curr_output['output'] = result 
-    json.dump(curr_output, open(args.output_path + '/{}.json'.format(problem_id), 'w'))    
+    json.dump(curr_output, open(args.output_path + '/{}.json'.format(problem_id), 'w'))
